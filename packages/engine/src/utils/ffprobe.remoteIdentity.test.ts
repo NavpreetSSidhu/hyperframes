@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getFfmpegBinary, getFfprobeBinary } from "./ffmpegBinaries.js";
+import { getFfmpegBinary } from "./ffmpegBinaries.js";
 import {
   buildProbeFactsText,
   declareContentAddressedUrl,
