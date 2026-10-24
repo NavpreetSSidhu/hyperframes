@@ -1379,6 +1379,7 @@ async function extractPlanVideos(c: PlanComposition, deferRangeExtraction: boole
     // A chunk cannot fall back to decoding a source the planner held: a missing frame set
     // renders as a silent blank video, so every declared source must extract.
     assertVideoExtractionSucceeded(extractResult.extractionResult);
+    c.log.info("[plan] extract phases", { ...extractResult.extractionResult.phaseBreakdown });
   }
   return extractResult;
 }
