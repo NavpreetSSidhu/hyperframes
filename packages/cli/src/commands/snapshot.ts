@@ -1,6 +1,7 @@
 import { reportArtifacts } from "../utils/toolContext.js";
 import { withProjectLock } from "../utils/projectLock.js";
 import {
+  parseSnapshotAt,
   parseSnapshotRange,
   sampleSnapshotRange,
   resolveSnapshotCompositionRange,
@@ -1277,6 +1278,8 @@ export default defineCommand({
     }
     const frames = parseInt(args.frames as string, 10) || 5;
     const range = args.range === undefined ? undefined : parseSnapshotRange(String(args.range));
+    const atTimestamps = args.at ? parseSnapshotAt(String(args.at)) : undefined;
+    if (args.keep === true && atTimestamps) assertDistinctKeepNames(atTimestamps);
     const composition =
       args.composition === undefined ? undefined : String(args.composition).trim();
     if (composition === "") throw new Error("--composition requires a composition ID");
@@ -1313,13 +1316,6 @@ export default defineCommand({
       failCommand();
     }
     const timeout = parseInt(args.timeout as string, 10) || 5000;
-    const atTimestamps = args.at
-      ? String(args.at)
-          .split(",")
-          .map((s) => parseFloat(s.trim()))
-          .filter((n) => !isNaN(n))
-      : undefined;
-    if (args.keep === true && atTimestamps) assertDistinctKeepNames(atTimestamps);
     // Gemini frame analysis runs by default (silently skipped if
     // GEMINI_API_KEY is not set). `--describe "custom question"` overrides
     // the default prompt with a targeted question. `--describe false` opts
@@ -1376,11 +1372,8 @@ export default defineCommand({
           log,
         });
         const paths = captured.paths;
-        reportArtifacts(
-          "snapshot",
-          "frame",
-          paths.map((path) => resolve(project.dir, path)),
-        );
+        const framePaths = paths.map((path) => resolve(project.dir, path));
+        reportArtifacts("snapshot", "frame", framePaths);
 
         if (paths.length === 0) {
           fail(`\n${c.error("✗")} Could not determine composition duration — no frames captured`);
@@ -1414,7 +1407,7 @@ export default defineCommand({
             printReview(captured.review, reviewSheets, log);
           } else if (args.keep !== true) {
             contactSheets = await createSnapshotContactSheet(
-              snapshotDir,
+              framePaths,
               join(snapshotDir, "contact-sheet.jpg"),
             );
           }
