@@ -294,7 +294,9 @@ describe.skipIf(!HAS_FFMPEG)("deploySite probe facts", { timeout: 60_000 }, () =
       s3.bodies.get(`test-bucket/sites/${site.siteId}/files.json`)?.toString() ?? "",
     ).find((file) => file.path === "assets/take.mp4");
     const facts = probeFactsUri("test-bucket", take?.sha256 ?? "").replace("s3://", "");
-    expect(JSON.parse(s3.bodies.get(facts)?.toString() ?? "{}").streams[0].codec_type).toBe(
+    const stored = JSON.parse(s3.bodies.get(facts)?.toString() ?? "{}");
+    expect(stored.ffprobe.streams[0].codec_type).toBe("video");
+    expect(stored.finalFrame.seconds).toBeGreaterThan(1.5);
       "video",
     );
     expect(sitePaths(s3, site.siteId)).toEqual([
