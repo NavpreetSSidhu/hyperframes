@@ -17,6 +17,7 @@ describe.skipIf(!HAS_FFMPEG)("deferred windows of a remote source", { timeout: 1
   let server: Server;
   let open = 0;
   let peak = 0;
+  let requests = 0;
   let url = "";
 
   beforeAll(async () => {
@@ -31,6 +32,7 @@ describe.skipIf(!HAS_FFMPEG)("deferred windows of a remote source", { timeout: 1
     server = createServer((req, res) => {
       const start = Number(/bytes=(\d+)-/.exec(req.headers.range ?? "")?.[1] ?? 0);
       open++;
+      requests++;
       peak = Math.max(peak, open);
       res.on("close", () => open--);
       setTimeout(() => {
@@ -53,26 +55,40 @@ describe.skipIf(!HAS_FFMPEG)("deferred windows of a remote source", { timeout: 1
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("counts the frames of many windows with more decodes at once than the CPU-sized limit", async () => {
+  async function defer(mediaStart: (i: number) => number) {
     const videos: VideoElement[] = Array.from({ length: 24 }, (_, i) => ({
       id: `cut-${i}`,
       src: "clip.mp4",
       start: i * 3,
       end: i * 3 + 3,
-      mediaStart: i * 0.2,
+      mediaStart: mediaStart(i),
       loop: false,
       hasAudio: false,
     }));
-
+    peak = 0;
+    requests = 0;
     const result = await extractAllVideoFrames(videos, dir, {
       fps: 30,
-      outputDir: join(dir, "frames"),
+      outputDir: join(dir, `frames-${Math.random().toString(36).slice(2)}`),
       deferRangeExtraction: true,
       urlByAbsentLocalPath: new Map([[join(dir, "clip.mp4"), url]]),
     });
-
     expect(result.errors).toEqual([]);
     expect(result.extracted.every((clip) => clip.deferredRange !== undefined)).toBe(true);
+    return result;
+  }
+
+  it("counts the frames of windows that end inside the source without decoding any", async () => {
+    const result = await defer((i) => i * 0.1);
+
+    expect(result.extracted.map((clip) => clip.totalFrames)).toEqual(Array(24).fill(90));
+    expect(requests).toBeLessThanOrEqual(4);
+  });
+
+  it("decodes the tail of windows that reach the source end, many at a time", async () => {
+    const result = await defer((i) => 5 + i * 0.05);
+
+    expect(result.extracted.length).toBe(24);
     expect(peak).toBeGreaterThan(Math.max(1, Math.floor(cpus().length / 2)));
   });
 });

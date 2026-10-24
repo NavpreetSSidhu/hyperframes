@@ -2284,6 +2284,29 @@ export async function extractAllVideoFrames(
     );
     const tailFrames = Math.min(expectedFrames, Math.ceil(fps));
     if (expectedFrames <= tailFrames) return null;
+    const deferred = (totalFrames: number): ExtractedFrames => {
+      const outputDir = join(options.outputDir, work.video.id);
+      mkdirSync(outputDir, { recursive: true });
+      return {
+        videoId: work.video.id,
+        srcPath: work.videoPath,
+        outputDir,
+        framePattern: `${FRAME_FILENAME_PREFIX}%05d.${work.format}`,
+        fps,
+        totalFrames,
+        metadata: work.metadata,
+        framePaths: new Map(),
+        deferredRange: {
+          startTime: work.extractionMediaStart,
+          durationSeconds: work.videoDuration,
+          format: work.format,
+        },
+      };
+    };
+    // A window that ends a second or more inside the source cannot run out of frames: its count is the expected one.
+    if (work.extractionMediaStart + work.videoDuration + 1 <= resolvePlayableVideoDuration(work.metadata)) {
+      return deferred(expectedFrames);
+    }
     const probeDir = join(options.outputDir, `${work.video.id}.tail-probe`);
     try {
       const tail = await extractVideoFramesRange(
@@ -2303,23 +2326,7 @@ export async function extractAllVideoFrames(
       const totalFrames = expectedFrames - tailFrames + tail.totalFrames;
       // A full extraction this short rewrites the probed duration; let it.
       if (totalFrames <= expectedFrames * 0.6) return null;
-      const outputDir = join(options.outputDir, work.video.id);
-      mkdirSync(outputDir, { recursive: true });
-      return {
-        videoId: work.video.id,
-        srcPath: work.videoPath,
-        outputDir,
-        framePattern: `${FRAME_FILENAME_PREFIX}%05d.${work.format}`,
-        fps,
-        totalFrames,
-        metadata: work.metadata,
-        framePaths: new Map(),
-        deferredRange: {
-          startTime: work.extractionMediaStart,
-          durationSeconds: work.videoDuration,
-          format: work.format,
-        },
-      };
+      return deferred(totalFrames);
     } catch {
       return null;
     } finally {
