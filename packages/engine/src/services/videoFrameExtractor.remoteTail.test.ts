@@ -74,13 +74,13 @@ describe.skipIf(!HAS_FFMPEG)("deferred windows of a remote source", { timeout: 1
       urlByAbsentLocalPath: new Map([[join(dir, "clip.mp4"), url]]),
     });
     expect(result.errors).toEqual([]);
-    expect(result.extracted.every((clip) => clip.deferredRange !== undefined)).toBe(true);
     return result;
   }
 
   it("counts the frames of windows that end inside the source without decoding any", async () => {
     const result = await defer((i) => i * 0.1);
 
+    expect(result.extracted.every((clip) => clip.deferredRange !== undefined)).toBe(true);
     expect(result.extracted.map((clip) => clip.totalFrames)).toEqual(Array(24).fill(90));
     expect(requests).toBeLessThanOrEqual(4);
   });
