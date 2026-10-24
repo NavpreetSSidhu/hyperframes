@@ -93,59 +93,74 @@ describe.skipIf(!HAS_FFMPEG)("deferred windows of a remote source", { timeout: 1
   });
 });
 
-describe.skipIf(!HAS_FFMPEG)("a deferred window inside local sources of other shapes", { timeout: 120_000 }, () => {
-  let dir: string;
-  beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), "hf-defer-shapes-"));
-    const make = (name: string, args: string[]) => {
-      const made = spawnSync(getFfmpegBinary(), ["-v", "error", "-y", ...args, join(dir, name)]);
-      expect(made.status).toBe(0);
-    };
-    const source = ["-f", "lavfi", "-i", "testsrc2=size=160x90:rate=30000/1001:duration=12"];
-    make("ntsc-bframes.mp4", [...source, ...["-c:v", "libx264", "-bf", "3", "-g", "48"]]);
-    make("vfr.mp4", [
-      ...source,
-      ...["-vf", "select=not(mod(n\\,3))+not(mod(n\\,7))", "-fps_mode", "vfr", "-c:v", "libx264"],
-    ]);
-  });
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+describe.skipIf(!HAS_FFMPEG)(
+  "a deferred window inside local sources of other shapes",
+  { timeout: 120_000 },
+  () => {
+    let dir: string;
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "hf-defer-shapes-"));
+      const make = (name: string, args: string[]) => {
+        const made = spawnSync(getFfmpegBinary(), ["-v", "error", "-y", ...args, join(dir, name)]);
+        expect(made.status).toBe(0);
+      };
+      const source = ["-f", "lavfi", "-i", "testsrc2=size=160x90:rate=30000/1001:duration=12"];
+      make("ntsc-bframes.mp4", [...source, ...["-c:v", "libx264", "-bf", "3", "-g", "48"]]);
+      make("vfr.mp4", [
+        ...source,
+        ...["-vf", "select=not(mod(n\\,3))+not(mod(n\\,7))", "-fps_mode", "vfr", "-c:v", "libx264"],
+      ]);
+    });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  const window = (src: string, mediaStart: number): VideoElement => ({
-    id: `w-${mediaStart}`,
-    src,
-    start: 0,
-    end: 3,
-    mediaStart,
-    loop: false,
-    hasAudio: false,
-  });
-
-  it.each([
-    { fps: 24, mediaStart: 1.37 },
-    { fps: 30, mediaStart: 0 },
-    { fps: 60, mediaStart: 4.2 },
-  ])("counts $fps fps frames of an NTSC source with B-frames as extracting them does", async (c) => {
-    const options = { fps: c.fps, outputDir: join(dir, `out-${c.fps}-${c.mediaStart}`) };
-    const full = await extractAllVideoFrames([window("ntsc-bframes.mp4", c.mediaStart)], dir, options);
-    const deferred = await extractAllVideoFrames(
-      [window("ntsc-bframes.mp4", c.mediaStart)],
-      dir,
-      { ...options, outputDir: join(dir, `defer-${c.fps}-${c.mediaStart}`), deferRangeExtraction: true },
-    );
-
-    expect(deferred.extracted[0]?.deferredRange).toBeDefined();
-    expect(deferred.extracted[0]?.totalFrames).toBe(full.extracted[0]?.totalFrames);
-  });
-
-  it("leaves a variable-frame-rate source to a full extraction", async () => {
-    const deferred = await extractAllVideoFrames([window("vfr.mp4", 1)], dir, {
-      fps: 30,
-      outputDir: join(dir, "defer-vfr"),
-      deferRangeExtraction: true,
+    const window = (src: string, mediaStart: number): VideoElement => ({
+      id: `w-${mediaStart}`,
+      src,
+      start: 0,
+      end: 3,
+      mediaStart,
+      loop: false,
+      hasAudio: false,
     });
 
-    expect(deferred.errors).toEqual([]);
-    expect(deferred.extracted[0]?.deferredRange).toBeUndefined();
-    expect(deferred.extracted[0]?.framePaths.size).toBeGreaterThan(0);
-  });
-});
+    it.each([
+      { fps: 24, mediaStart: 1.37 },
+      { fps: 30, mediaStart: 0 },
+      { fps: 60, mediaStart: 4.2 },
+    ])(
+      "counts $fps fps frames of an NTSC source with B-frames as extracting them does",
+      async (c) => {
+        const options = { fps: c.fps, outputDir: join(dir, `out-${c.fps}-${c.mediaStart}`) };
+        const full = await extractAllVideoFrames(
+          [window("ntsc-bframes.mp4", c.mediaStart)],
+          dir,
+          options,
+        );
+        const deferred = await extractAllVideoFrames(
+          [window("ntsc-bframes.mp4", c.mediaStart)],
+          dir,
+          {
+            ...options,
+            outputDir: join(dir, `defer-${c.fps}-${c.mediaStart}`),
+            deferRangeExtraction: true,
+          },
+        );
+
+        expect(deferred.extracted[0]?.deferredRange).toBeDefined();
+        expect(deferred.extracted[0]?.totalFrames).toBe(full.extracted[0]?.totalFrames);
+      },
+    );
+
+    it("leaves a variable-frame-rate source to a full extraction", async () => {
+      const deferred = await extractAllVideoFrames([window("vfr.mp4", 1)], dir, {
+        fps: 30,
+        outputDir: join(dir, "defer-vfr"),
+        deferRangeExtraction: true,
+      });
+
+      expect(deferred.errors).toEqual([]);
+      expect(deferred.extracted[0]?.deferredRange).toBeUndefined();
+      expect(deferred.extracted[0]?.framePaths.size).toBeGreaterThan(0);
+    });
+  },
+);
