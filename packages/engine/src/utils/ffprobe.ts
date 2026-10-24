@@ -416,7 +416,9 @@ export async function readProbeJson(filePath: string, signal?: AbortSignal): Pro
   if (factsUrl) {
     try {
       const response = await fetch(factsUrl, {
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
+          : AbortSignal.timeout(10_000),
       });
       if (response.ok) {
         const text = await response.text();

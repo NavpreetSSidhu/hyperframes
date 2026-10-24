@@ -723,7 +723,15 @@ export async function putProbeFacts(
   const { key } = parseS3Uri(uri);
   const size = statSync(localPath).size;
   try {
-    await putImmutableBody(client, localPath, bucket, key, size, await sha256File(localPath), "application/json");
+    await putImmutableBody(
+      client,
+      localPath,
+      bucket,
+      key,
+      size,
+      await sha256File(localPath),
+      "application/json",
+    );
   } catch (error) {
     if (!isS3PreconditionFailed(error)) throw error;
     return "reused";
