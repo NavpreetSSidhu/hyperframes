@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { extname } from "node:path";
-import { readProbeJson } from "@hyperframes/engine";
+import { buildProbeFactsText } from "@hyperframes/engine";
 
 const PROBE_FACTS_EXTENSIONS = new Set([".mp4", ".mov", ".m4v", ".webm", ".mkv"]);
 
@@ -17,7 +17,7 @@ export async function buildProbeFacts(
   signal?: AbortSignal,
 ): Promise<ProbeFactsOutcome> {
   try {
-    writeFileSync(outputPath, await readProbeJson(inputPath, signal));
+    writeFileSync(outputPath, await buildProbeFactsText(inputPath, signal));
     return "built";
   } catch (error) {
     if (signal?.aborted) throw error;

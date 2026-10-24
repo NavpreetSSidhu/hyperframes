@@ -45,6 +45,7 @@ import {
   extractMediaMetadata,
   mediaFileIdentity,
   readMetadataCache,
+  resolvePlayableVideoDuration,
   writeMetadataCache,
   type MediaProbeCacheEntry,
   type VideoMetadata,
@@ -1288,12 +1289,7 @@ function resolveSegmentDuration(
  * the container duration when ffprobe omits the stream duration; keep the
  * explicit fallback here for callers supplying older/manual metadata.
  */
-export function resolvePlayableVideoDuration(metadata: VideoMetadata): number {
-  return Number.isFinite(metadata.videoStreamDurationSeconds) &&
-    metadata.videoStreamDurationSeconds > 0
-    ? (metadata.videoStreamLeadSeconds ?? 0) + metadata.videoStreamDurationSeconds
-    : metadata.durationSeconds;
-}
+export { resolvePlayableVideoDuration };
 
 export interface TimelineExtractionWindow {
   compositionStart: number;

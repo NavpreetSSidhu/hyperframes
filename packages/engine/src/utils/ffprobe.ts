@@ -404,32 +404,77 @@ export function writeMetadataCache<T>(
   );
 }
 
-/** Part of the name a stored probe is kept under (`.probe.v1.json`): bump it with the args below. */
-export const PROBE_FACTS_VERSION = "v1";
+/** Part of the name a stored probe is kept under (`.probe.v2.json`): bump it with the args below. */
+export const PROBE_FACTS_VERSION = "v2";
 const PROBE_JSON_ARGS = ["-print_format", "json", "-show_format", "-show_streams"];
 
-/** The ffprobe JSON `probeMediaOutput` works from; stored copies of it are read in place of probing. */
-export async function readProbeJson(filePath: string, signal?: AbortSignal): Promise<string> {
-  const factsUrl = /^https?:\/\//i.test(filePath)
-    ? probeFactsUrls.get(withoutQuery(filePath))
-    : undefined;
-  if (factsUrl) {
-    try {
-      const response = await fetch(factsUrl, {
-        signal: signal
-          ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
-          : AbortSignal.timeout(10_000),
-      });
-      if (response.ok) {
-        const text = await response.text();
-        JSON.parse(text);
-        return text;
+interface StoredProbeFacts {
+  ffprobe: FFProbeOutput;
+  /** What `extractFinalVideoFrameTimestamp` answers for the stream window it names. */
+  finalFrame?: { streamStart: number; streamDuration: number; seconds: number };
+}
+
+const storedFacts = new Map<string, Promise<StoredProbeFacts | null>>();
+
+/** The facts stored for a declared URL, fetched once; null when there are none or they cannot be read. */
+function readStoredFacts(filePath: string): Promise<StoredProbeFacts | null> | undefined {
+  if (!/^https?:\/\//i.test(filePath)) return undefined;
+  const factsUrl = probeFactsUrls.get(withoutQuery(filePath));
+  if (!factsUrl) return undefined;
+  let facts = storedFacts.get(factsUrl);
+  if (!facts) {
+    facts = (async () => {
+      try {
+        const response = await fetch(factsUrl, { signal: AbortSignal.timeout(10_000) });
+        if (!response.ok) return null;
+        const parsed = JSON.parse(await response.text()) as StoredProbeFacts;
+        return Array.isArray(parsed.ffprobe?.streams) ? parsed : null;
+      } catch {
+        return null;
       }
-    } catch {
-      if (signal?.aborted) throw signal.reason;
-    }
+    })();
+    storedFacts.set(factsUrl, facts);
   }
+  return facts;
+}
+
+/** The ffprobe JSON `probeMediaOutput` works from; a declared URL's stored copy is read in place of probing it. */
+export async function readProbeJson(filePath: string, signal?: AbortSignal): Promise<string> {
+  const stored = await readStoredFacts(filePath);
+  if (stored) return JSON.stringify(stored.ffprobe);
   return runFfprobe(filePath, PROBE_JSON_ARGS, signal);
+}
+
+/** What a site stores beside a video: its ffprobe JSON and the final-frame timestamp a plan would otherwise probe for. */
+export async function buildProbeFactsText(filePath: string, signal?: AbortSignal): Promise<string> {
+  const facts: StoredProbeFacts = {
+    ffprobe: parseProbeJson(await runFfprobe(filePath, PROBE_JSON_ARGS, signal)),
+  };
+  try {
+    const metadata = await extractMediaMetadata(filePath);
+    const window = resolveStreamWindow(filePath, {
+      videoStreamStartSeconds: metadata.videoStreamStartSeconds,
+      videoStreamDurationSeconds:
+        resolvePlayableVideoDuration(metadata) - (metadata.videoStreamLeadSeconds ?? 0),
+    });
+    if (window.videoStreamDurationSeconds > 0) {
+      facts.finalFrame = {
+        streamStart: window.videoStreamStartSeconds,
+        streamDuration: window.videoStreamDurationSeconds,
+        seconds: await extractFinalVideoFrameTimestamp(filePath, window, signal),
+      };
+    }
+  } catch {
+    if (signal?.aborted) throw signal.reason;
+  }
+  return JSON.stringify(facts);
+}
+
+export function resolvePlayableVideoDuration(metadata: VideoMetadata): number {
+  return Number.isFinite(metadata.videoStreamDurationSeconds) &&
+    metadata.videoStreamDurationSeconds > 0
+    ? (metadata.videoStreamLeadSeconds ?? 0) + metadata.videoStreamDurationSeconds
+    : metadata.durationSeconds;
 }
 
 async function probeMediaOutput(filePath: string, signal?: AbortSignal): Promise<FFProbeOutput> {
@@ -936,6 +981,14 @@ export async function extractFinalVideoFrameTimestamp(
   if (cached) return cached;
 
   const probePromise = (async () => {
+    const stored = (await readStoredFacts(filePath))?.finalFrame;
+    if (
+      stored &&
+      stored.streamStart === videoStreamStartSeconds &&
+      stored.streamDuration === videoDurationSeconds
+    ) {
+      return stored.seconds;
+    }
     if (!(videoDurationSeconds > 0) || !Number.isFinite(videoDurationSeconds)) {
       throw new Error(
         `[FFmpeg] Cannot locate final video frame for invalid duration ${String(videoDurationSeconds)}`,

@@ -322,7 +322,7 @@ describe.skipIf(!HAS_FFMPEG)("deploySite probe facts", { timeout: 60_000 }, () =
       else process.env.HYPERFRAMES_FFPROBE_PATH = before;
     }
 
-    expect([...s3.existing].filter((id) => id.endsWith(".probe.v1.json"))).toEqual([]);
+    expect([...s3.existing].filter((id) => id.endsWith(".probe.v2.json"))).toEqual([]);
     expect(notices.some((message) => message.includes("ffprobe"))).toBe(true);
   });
 });

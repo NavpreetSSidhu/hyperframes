@@ -83,6 +83,6 @@ describe("downloadSiteFiles", () => {
       true,
     );
 
-    expect(remote["takes/camera.mov"]?.probeFactsUrl).toContain(`${VIDEO_SHA}.probe.v1.json`);
+    expect(remote["takes/camera.mov"]?.probeFactsUrl).toContain(`${VIDEO_SHA}.probe.v2.json`);
   });
 });

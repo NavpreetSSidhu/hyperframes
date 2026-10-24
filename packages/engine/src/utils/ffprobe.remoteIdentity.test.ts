@@ -7,10 +7,12 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getFfmpegBinary, getFfprobeBinary } from "./ffmpegBinaries.js";
 import {
+  buildProbeFactsText,
   declareContentAddressedUrl,
   declareProbeFactsUrl,
   readProbeJson,
   extractAudioMetadata,
+  extractFinalVideoFrameTimestamp,
   extractMediaMetadata,
 } from "./ffprobe.js";
 
@@ -33,11 +35,7 @@ describe.skipIf(!HAS_FFMPEG)("probing a file held at a URL", { timeout: 60_000 }
     ]);
     expect(made.status).toBe(0);
     const body = readFileSync(path);
-    factsJson = (await import("node:child_process")).spawnSync(
-      getFfprobeBinary(),
-      ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", "--", path],
-      { encoding: "utf-8" },
-    ).stdout;
+    factsJson = await buildProbeFactsText(path);
     server = createServer((req, res) => {
       requests++;
       if (req.url?.startsWith("/facts/")) return void res.writeHead(200).end(factsJson);
@@ -99,6 +97,21 @@ describe.skipIf(!HAS_FFMPEG)("probing a file held at a URL", { timeout: 60_000 }
 
     expect(metadata.width).toBe(64);
     expect(metadata.hasAudio).toBe(true);
+  });
+
+  it("answers a declared URL's final-frame timestamp from its stored copy, for the window it was stored for", async () => {
+    const url = `${base}/gone/final.mp4`;
+    declareProbeFactsUrl(url, `${base}/facts/final.json`);
+    const metadata = await extractMediaMetadata(url);
+    const window = {
+      videoStreamStartSeconds: metadata.videoStreamStartSeconds,
+      videoStreamDurationSeconds: metadata.videoStreamDurationSeconds,
+    };
+
+    const seconds = await extractFinalVideoFrameTimestamp(url, window);
+
+    expect(seconds).toBeGreaterThan(2);
+    expect(seconds).toBeLessThanOrEqual(3);
   });
 
   it("probes the media itself when its stored JSON cannot be read", async () => {

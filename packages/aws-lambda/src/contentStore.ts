@@ -15,7 +15,7 @@ export function contentStoreUri(bucket: string, sha256: string): string {
 }
 
 export function probeFactsUri(bucket: string, sha256: string): string {
-  return `${contentStoreUri(bucket, sha256)}.probe.v1.json`;
+  return `${contentStoreUri(bucket, sha256)}.probe.v2.json`;
 }
 
 export function audioSidecarUri(bucket: string, sha256: string): string {
