@@ -52,6 +52,7 @@ import {
   resolveConfig,
   type AudioProcessingFailure,
   declareContentAddressedUrl,
+  declareProbeFactsUrl,
 } from "@hyperframes/engine";
 import { defaultLogger, type ProducerLogger } from "../../logger.js";
 import {
@@ -330,6 +331,8 @@ export interface RemoteProjectFile {
   readonly url: string;
   /** A file of only this video's audio, when one was stored: the audio mix reads it, not the video. */
   readonly audioSidecarUrl?: string;
+  /** The file's stored ffprobe JSON: the plan reads it instead of probing the file over the network. */
+  readonly probeFactsUrl?: string;
   readonly sha256: string;
   readonly sizeBytes: number;
 }
@@ -1206,7 +1209,10 @@ async function compilePlanComposition(
   // ── Compile ──
   const remoteFiles = Object.entries(options.remoteFiles ?? {});
   const remoteLocalPath = (rel: string) => join(projectDir, ...rel.split("/"));
-  for (const [, file] of remoteFiles) declareContentAddressedUrl(file.url, file.sha256);
+  for (const [, file] of remoteFiles) {
+    declareContentAddressedUrl(file.url, file.sha256);
+    if (file.probeFactsUrl) declareProbeFactsUrl(file.url, file.probeFactsUrl);
+  }
   // Keyed by the path each file would have had, which is what every media resolver computes.
   const urlByAbsentLocalPath = new Map(
     remoteFiles.map(([rel, file]) => [remoteLocalPath(rel), file.url]),

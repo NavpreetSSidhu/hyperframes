@@ -5,9 +5,11 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getFfmpegBinary } from "./ffmpegBinaries.js";
+import { getFfmpegBinary, getFfprobeBinary } from "./ffmpegBinaries.js";
 import {
   declareContentAddressedUrl,
+  declareProbeFactsUrl,
+  readProbeJson,
   extractAudioMetadata,
   extractMediaMetadata,
 } from "./ffprobe.js";
@@ -19,6 +21,7 @@ describe.skipIf(!HAS_FFMPEG)("probing a file held at a URL", { timeout: 60_000 }
   let server: Server;
   let requests = 0;
   let base: string;
+  let factsJson = "";
 
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), "hf-remote-identity-"));
@@ -30,8 +33,15 @@ describe.skipIf(!HAS_FFMPEG)("probing a file held at a URL", { timeout: 60_000 }
     ]);
     expect(made.status).toBe(0);
     const body = readFileSync(path);
+    factsJson = (await import("node:child_process")).spawnSync(
+      getFfprobeBinary(),
+      ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", "--", path],
+      { encoding: "utf-8" },
+    ).stdout;
     server = createServer((req, res) => {
       requests++;
+      if (req.url?.startsWith("/facts/")) return void res.writeHead(200).end(factsJson);
+      if (req.url?.startsWith("/gone/")) return void res.writeHead(404).end("gone");
       const start = Number(/bytes=(\d+)-/.exec(req.headers.range ?? "")?.[1] ?? 0);
       res.writeHead(206, {
         "Accept-Ranges": "bytes",
@@ -79,5 +89,22 @@ describe.skipIf(!HAS_FFMPEG)("probing a file held at a URL", { timeout: 60_000 }
 
     expect(second).toBeGreaterThanOrEqual(first);
     expect(second).toBeGreaterThan(5);
+  });
+
+  it("answers a declared URL's probe from its stored JSON without touching the media", async () => {
+    const url = `${base}/gone/stored.mp4`;
+    declareProbeFactsUrl(url, `${base}/facts/stored.json`);
+
+    const metadata = await extractMediaMetadata(url);
+
+    expect(metadata.width).toBe(64);
+    expect(metadata.hasAudio).toBe(true);
+  });
+
+  it("probes the media itself when its stored JSON cannot be read", async () => {
+    const url = `${base}/content/fallback.mp4`;
+    declareProbeFactsUrl(url, `${base}/gone/facts.json`);
+
+    expect(JSON.parse(await readProbeJson(url)).streams.length).toBe(2);
   });
 });

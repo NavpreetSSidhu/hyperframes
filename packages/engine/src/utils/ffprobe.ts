@@ -356,6 +356,13 @@ export function declareContentAddressedUrl(url: string, sha256: string): void {
   contentAddressedUrls.set(withoutQuery(url), sha256);
 }
 
+const probeFactsUrls = new Map<string, string>();
+
+/** Where the ffprobe JSON of a content-addressed URL was stored beforehand: reading it replaces probing the file. */
+export function declareProbeFactsUrl(url: string, factsUrl: string): void {
+  probeFactsUrls.set(withoutQuery(url), factsUrl);
+}
+
 export function mediaFileIdentity(filePath: string): string | null {
   if (/^https?:\/\//i.test(filePath)) {
     const sha256 = contentAddressedUrls.get(withoutQuery(filePath));
@@ -397,6 +404,32 @@ export function writeMetadataCache<T>(
   );
 }
 
+/** Part of the name a stored probe is kept under (`.probe.v1.json`): bump it with the args below. */
+export const PROBE_FACTS_VERSION = "v1";
+const PROBE_JSON_ARGS = ["-print_format", "json", "-show_format", "-show_streams"];
+
+/** The ffprobe JSON `probeMediaOutput` works from; stored copies of it are read in place of probing. */
+export async function readProbeJson(filePath: string, signal?: AbortSignal): Promise<string> {
+  const factsUrl = /^https?:\/\//i.test(filePath)
+    ? probeFactsUrls.get(withoutQuery(filePath))
+    : undefined;
+  if (factsUrl) {
+    try {
+      const response = await fetch(factsUrl, {
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
+      });
+      if (response.ok) {
+        const text = await response.text();
+        JSON.parse(text);
+        return text;
+      }
+    } catch {
+      if (signal?.aborted) throw signal.reason;
+    }
+  }
+  return runFfprobe(filePath, PROBE_JSON_ARGS, signal);
+}
+
 async function probeMediaOutput(filePath: string, signal?: AbortSignal): Promise<FFProbeOutput> {
   let cache = mediaProbeOutputCache;
   if (signal) {
@@ -416,11 +449,7 @@ async function probeMediaOutput(filePath: string, signal?: AbortSignal): Promise
     }
     return cached.promise;
   }
-  const promise = runFfprobe(
-    filePath,
-    ["-print_format", "json", "-show_format", "-show_streams"],
-    signal,
-  ).then(parseProbeJson);
+  const promise = readProbeJson(filePath, signal).then(parseProbeJson);
   if (identity !== null) {
     cache.set(filePath, { identity, promise });
     if (!signal && cache.size > MEDIA_PROBE_OUTPUT_CACHE_MAX_ENTRIES) {
