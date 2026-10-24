@@ -193,7 +193,7 @@ describe("snapshot contact sheet failures", () => {
     expect(console.warn).not.toHaveBeenCalled();
   });
 
-  it.each(["-1", "0.5,-1", "Infinity", "NaN", "1,"])(
+  it.each(["-1", "0.5,-1", "Infinity", "NaN", "1,", "1junk", ""])(
     "refuses --at %s before writing anything",
     async (at) => {
       const output = join(project, "snapshots");

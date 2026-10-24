@@ -1278,7 +1278,7 @@ export default defineCommand({
     }
     const frames = parseInt(args.frames as string, 10) || 5;
     const range = args.range === undefined ? undefined : parseSnapshotRange(String(args.range));
-    const atTimestamps = args.at ? parseSnapshotAt(String(args.at)) : undefined;
+    const atTimestamps = args.at === undefined ? undefined : parseSnapshotAt(String(args.at));
     if (args.keep === true && atTimestamps) assertDistinctKeepNames(atTimestamps);
     const composition =
       args.composition === undefined ? undefined : String(args.composition).trim();
