@@ -297,8 +297,6 @@ describe.skipIf(!HAS_FFMPEG)("deploySite probe facts", { timeout: 60_000 }, () =
     const stored = JSON.parse(s3.bodies.get(facts)?.toString() ?? "{}");
     expect(stored.ffprobe.streams[0].codec_type).toBe("video");
     expect(stored.finalFrame.seconds).toBeGreaterThan(1.5);
-      "video",
-    );
     expect(sitePaths(s3, site.siteId)).toEqual([
       "assets/style.css",
       "assets/take.mp4",
