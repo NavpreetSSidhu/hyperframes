@@ -2304,7 +2304,10 @@ export async function extractAllVideoFrames(
       };
     };
     // A window that ends a second or more inside the source cannot run out of frames: its count is the expected one.
-    if (work.extractionMediaStart + work.videoDuration + 1 <= resolvePlayableVideoDuration(work.metadata)) {
+    if (
+      work.extractionMediaStart + work.videoDuration + 1 <=
+      resolvePlayableVideoDuration(work.metadata)
+    ) {
       return deferred(expectedFrames);
     }
     const probeDir = join(options.outputDir, `${work.video.id}.tail-probe`);
