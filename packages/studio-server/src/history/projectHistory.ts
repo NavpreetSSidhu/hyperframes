@@ -1222,6 +1222,16 @@ class Engine {
       [...this.tracked.keys()].map((path) => [path, null]),
     );
     for (const [path, hash] of files) target.set(path, hash);
+    if (point === START && this.adopting.size > 0) {
+      throw new HistoryRefusedError(
+        "The project's starting copy is still being saved; try again in a moment. Nothing was changed.",
+      );
+    }
+    if (this.tracked.size > 0 && [...target.values()].every((hash) => hash === null)) {
+      throw new HistoryRefusedError(
+        "Restoring this point would remove every file in this project, so nothing was changed.",
+      );
+    }
     return this.writeAs(who, label, target, { restoredTo: point });
   }
 
@@ -1350,6 +1360,14 @@ export class HistoryClosedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "HistoryClosedError";
+  }
+}
+
+/** A restore that would empty the project, or reach a start not fully copied yet; nothing was written. */
+export class HistoryRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HistoryRefusedError";
   }
 }
 
