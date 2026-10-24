@@ -246,6 +246,8 @@ export interface ExtractionOptions {
   collectProbeFailures?: boolean;
   /** Extract only these runs of output frames, named as a full extraction names them. CFR only. */
   frameRanges?: readonly FrameRange[];
+  /** A short decode of a remote source, only to count its frames: it waits on the network, so it runs wider. */
+  tailProbe?: boolean;
   /**
    * Leave CFR windows longer than a second unextracted, returning `deferredRange` and an exact
    * `totalFrames` so another process can extract just the frames it needs with `frameRanges`.
@@ -881,6 +883,8 @@ function undoTickRoundingOnTheSourceFrameGrid(seek: number, lead: number): strin
 // Caps extraction ffmpeg runs across all clips; uncapped, dozens of clips starved each other into timeouts.
 const EXTRACTION_SLOTS = Math.max(1, Math.floor(cpus().length / 2));
 const inExtractionSlot = createConcurrencyLimit(EXTRACTION_SLOTS);
+const TAIL_PROBE_SLOTS = Math.max(1, Number(process.env.HF_TAIL_PROBE_SLOTS) || 16);
+const inTailProbeSlot = createConcurrencyLimit(TAIL_PROBE_SLOTS);
 
 interface SegmentedExtraction {
   decodeArgs: string[];
@@ -889,6 +893,7 @@ interface SegmentedExtraction {
   startTime: number;
   fps: number;
   segments: readonly FrameRange[];
+  gate: typeof inExtractionSlot;
   runOptions: { signal?: AbortSignal; stallTimeout: number };
 }
 
@@ -907,7 +912,7 @@ function splitFrameRanges(ranges: readonly FrameRange[], segmentFrames: number):
 }
 
 async function runSegmentedExtraction(job: SegmentedExtraction): Promise<RunFfmpegResult> {
-  const { decodeArgs, filterAndEncodeArgs, videoPath, startTime, fps, segments } = job;
+  const { decodeArgs, filterAndEncodeArgs, videoPath, startTime, fps, segments, gate } = job;
   const segmentCount = segments.length;
   // One failed segment fails the range, so stop the others instead of finishing them.
   const failed = new AbortController();
@@ -921,7 +926,7 @@ async function runSegmentedExtraction(job: SegmentedExtraction): Promise<RunFfmp
       const index = next++;
       const { firstFrame, frames } = segments[index]!;
       const seek = startTime + firstFrame / fps;
-      const result = await inExtractionSlot(
+      const result = await gate(
         () =>
           runFfmpeg(
             [
@@ -1135,6 +1140,7 @@ async function extractVideoFramesRangeUnredacted(
           videoPath,
           startTime,
           fps,
+          gate: options.tailProbe ? inTailProbeSlot : inExtractionSlot,
           segments: splitFrameRanges(
             options.frameRanges ?? [{ firstFrame: 0, frames: totalFrames }],
             segmentFrames,
@@ -2288,6 +2294,7 @@ export async function extractAllVideoFrames(
         {
           ...scopedExtractionOptions(work),
           frameRanges: [{ firstFrame: expectedFrames - tailFrames, frames: tailFrames }],
+          tailProbe: isHttpUrl(work.videoPath),
         },
         signal,
         config,
