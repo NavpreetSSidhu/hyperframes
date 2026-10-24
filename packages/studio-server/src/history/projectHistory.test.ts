@@ -2672,6 +2672,17 @@ describe("restore refuses to empty a project", () => {
     },
   );
 
+  it("refuses a start that holds only the media ledger", async () => {
+    const { history, write, read } = await project({ ".media/manifest.jsonl": "{}\n" });
+    expect(history.peek(START)).toHaveProperty([".media/manifest.jsonl"]);
+    const window = await history.beginWindow(you, "Add files");
+    write("index.html", "A");
+    write("compositions/a.html", "B");
+    await window.close();
+    await expect(history.restore(START, you)).rejects.toThrow(HistoryRefusedError);
+    expect([read("index.html"), read("compositions/a.html")]).toEqual(["A", "B"]);
+  });
+
   it("refuses start while its media copy is still adopting", async () => {
     let release = () => {};
     mediaCopy.held = new Promise<void>((resolve) => (release = resolve));

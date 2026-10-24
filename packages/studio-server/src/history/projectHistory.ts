@@ -1227,7 +1227,10 @@ class Engine {
         "The project's starting copy is still being saved; try again in a moment. Nothing was changed.",
       );
     }
-    if (this.tracked.size > 0 && [...target.values()].every((hash) => hash === null)) {
+    // History's own hidden records (the media ledger, Studio's manifests) are not the project's work.
+    const work = (path: string) => !KEPT_HIDDEN_PATHS.has(path);
+    const kept = [...target].some(([path, hash]) => hash !== null && work(path));
+    if ([...this.tracked.keys()].some(work) && !kept) {
       throw new HistoryRefusedError(
         "Restoring this point would remove every file in this project, so nothing was changed.",
       );
