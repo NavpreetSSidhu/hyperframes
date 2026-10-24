@@ -1227,10 +1227,9 @@ class Engine {
         "The project's starting copy is still being saved; try again in a moment. Nothing was changed.",
       );
     }
-    // History's own hidden records (the media ledger, Studio's manifests) are not the project's work.
-    const work = (path: string) => !KEPT_HIDDEN_PATHS.has(path);
-    const kept = [...target].some(([path, hash]) => hash !== null && work(path));
-    if ([...this.tracked.keys()].some(work) && !kept) {
+    const isProjectFile = (path: string) => !KEPT_HIDDEN_PATHS.has(path);
+    const keepsAny = [...target].some(([path, hash]) => hash !== null && isProjectFile(path));
+    if ([...this.tracked.keys()].some(isProjectFile) && !keepsAny) {
       throw new HistoryRefusedError(
         "Restoring this point would remove every file in this project, so nothing was changed.",
       );
@@ -1366,7 +1365,6 @@ export class HistoryClosedError extends Error {
   }
 }
 
-/** A restore that would empty the project, or reach a start not fully copied yet; nothing was written. */
 export class HistoryRefusedError extends Error {
   constructor(message: string) {
     super(message);
