@@ -2680,7 +2680,7 @@ describe("restore refuses to empty a project", () => {
     try {
       await expect(history.restore(START, you)).rejects.toThrow(HistoryRefusedError);
       expect(read("index.html")).toBe("A");
-      expect(readFileSync(join(projectDir, "clip.mp4"))).toEqual(clip);
+      expect(readFileSync(join(projectDir, "clip.mp4")).equals(clip)).toBe(true);
     } finally {
       release();
     }
